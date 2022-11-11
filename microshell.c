@@ -3,8 +3,8 @@
 #include <unistd.h>
 #include <stdio.h>
 
-#define SIDE_IN 0
-#define SIDE_OUT 1
+#define SIDE_OUT 0
+#define SIDE_IN 1
 
 #define STDIN 0
 #define STDOUT 1
@@ -108,6 +108,7 @@ void    parse(t_list **cmds, char *arg)
 
 int    excuter(t_list *cmd, char **env)
 {
+    printf("executer\n");
     int     ret;
     pid_t   pid;
     int     status;
@@ -126,12 +127,13 @@ int    excuter(t_list *cmd, char **env)
         exit_fatal();
     else if (pid == 0)
     {
-        if (cmd->type == TYPE_PIPE && dup2(cmd->pipe[SIDE_IN], STDOUT))
+        if (cmd->type == TYPE_PIPE && (dup2(cmd->pipe[SIDE_IN], STDOUT) < 0))
             exit_fatal();
-        if (cmd->prev && cmd->prev->type == TYPE_PIPE && dup2(cmd->prev->pipe[SIDE_OUT], STDIN))
+        if (cmd->prev && cmd->prev->type == TYPE_PIPE && (dup2(cmd->prev->pipe[SIDE_OUT], STDIN) < 0))
             exit_fatal();
         if ((ret=execve(cmd->args[0], cmd->args, env) < 0))
             exit_handler("error: cannot execute ", cmd->args[0]);
+        exit(ret);
         
     }
     else
@@ -139,15 +141,14 @@ int    excuter(t_list *cmd, char **env)
         waitpid(pid, &status, 0);
         if (pipe_open)
         {
-            if (cmd->type == TYPE_PIPE)
-            {
-                close(cmd->pipe[SIDE_IN]);
-                if (!cmd->next || cmd->type == TYPE_BREAK)
-                    close(cmd->pipe[SIDE_OUT]);
-            }
+            close(cmd->pipe[SIDE_IN]);
+            if (!cmd->next || cmd->type == TYPE_BREAK)
+                close(cmd->pipe[SIDE_OUT]);
         }
         if (cmd->prev && cmd->prev->type == TYPE_PIPE)
             close(cmd->prev->pipe[SIDE_OUT]);
+        if (WIFEXITED(status))
+			ret = WEXITSTATUS(status);
     }
     return ret;
 }
@@ -184,7 +185,6 @@ int main(int argc, char **argv, char **env)
     t_list  *cmds;
 
     ret = EXIT_SUCCESS;
-    printf("%d\n", argc);
     i = 1;
     while (i < argc)
         parse(&cmds, argv[i++]);
